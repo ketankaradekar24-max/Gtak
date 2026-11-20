@@ -1,0 +1,6 @@
+{
+  "name": "Namma City: Bengaluru",
+  "description": "An open-world 3D action driving and exploration game set across recognizable districts and landmarks of Bengaluru, India.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
