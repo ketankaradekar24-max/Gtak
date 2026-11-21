@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { LANDMARK_MARKERS, ROAD_SEGMENTS, WATER_ZONES } from '../game/bengaluruData';
+import { LANDMARK_MARKERS, RAIL_BUS_STATIONS, ROAD_SEGMENTS, WATER_ZONES } from '../game/bengaluruData';
 import { HudSnapshot } from '../game/types';
 
 interface MinimapCanvasProps {
@@ -18,11 +18,10 @@ export const MinimapCanvas: React.FC<MinimapCanvasProps> = ({ hud, onOpenFullMap
 
     const size = 168;
     const half = size / 2;
-    const scale = 0.36; // world meters -> minimap px
+    const scale = 0.22;
 
     ctx.clearRect(0, 0, size, size);
 
-    // Dark slate city base
     ctx.fillStyle = '#0f172a';
     ctx.fillRect(0, 0, size, size);
 
@@ -36,23 +35,61 @@ export const MinimapCanvas: React.FC<MinimapCanvasProps> = ({ hud, onOpenFullMap
     for (const w of WATER_ZONES) {
       const [mx, mz] = toMap(w.x, w.z);
       ctx.beginPath();
-      ctx.ellipse(mx, mz, w.rx * scale, w.rz * scale, 0, 0, Math.PI * 2);
+      ctx.ellipse(mx, mz, Math.max(2, w.rx * scale), Math.max(2, w.rz * scale), 0, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // Roads
+    // Ground & Flyover Roads
     for (const r of ROAD_SEGMENTS) {
-      const [x1, y1] = toMap(r.x1, r.z1);
-      const [x2, y2] = toMap(r.x2, r.z2);
-      ctx.strokeStyle = r.elevated ? '#f59e0b' : '#334155';
-      ctx.lineWidth = Math.max(3, r.width * scale * 0.65);
+      if (r.kind === 'metro' || r.points.length < 2) continue;
+      ctx.strokeStyle = r.elevated ? '#f59e0b' : r.kind === 'highway' ? '#475569' : '#334155';
+      ctx.lineWidth = Math.max(2.0, r.width * scale * 0.55);
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
+      r.points.forEach((pt, idx) => {
+        const [px, py] = toMap(pt.x, pt.z);
+        if (idx === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      });
       ctx.stroke();
     }
 
-    // Landmarks (Garages, Safehouses, Shops)
+    // All 5 Namma Metro Corridors
+    for (const r of ROAD_SEGMENTS) {
+      if (r.kind !== 'metro' || r.points.length < 2) continue;
+      const isUnderConst = r.metroStatus === 'under_construction';
+      ctx.strokeStyle =
+        r.metroLine === 'green'
+          ? '#22c55e'
+          : r.metroLine === 'yellow'
+          ? '#eab308'
+          : r.metroLine === 'pink'
+          ? 'rgba(236, 72, 153, 0.7)'
+          : r.metroLine === 'blue'
+          ? 'rgba(56, 189, 248, 0.7)'
+          : '#a855f7';
+      ctx.lineWidth = isUnderConst ? 1.4 : 1.8;
+      ctx.setLineDash(isUnderConst ? [2, 3] : [4, 3]);
+      ctx.beginPath();
+      r.points.forEach((pt, idx) => {
+        const [px, py] = toMap(pt.x, pt.z);
+        if (idx === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Rail & Bus Hubs
+    for (const rb of RAIL_BUS_STATIONS) {
+      const [rx, ry] = toMap(rb.x, rb.z);
+      if (rx < -10 || rx > size + 10 || ry < -10 || ry > size + 10) continue;
+      ctx.fillStyle = rb.kind === 'rail' ? '#facc15' : '#fb923c';
+      ctx.fillRect(rx - 2.5, ry - 2.5, 5, 5);
+    }
+
+    // Landmarks
     for (const lm of LANDMARK_MARKERS) {
       const [lx, ly] = toMap(lm.x, lm.z);
       if (lx < -10 || lx > size + 10 || ly < -10 || ly > size + 10) continue;
@@ -63,11 +100,32 @@ export const MinimapCanvas: React.FC<MinimapCanvasProps> = ({ hud, onOpenFullMap
           ? '#22c55e'
           : lm.type === 'petrol'
           ? '#f59e0b'
+          : lm.type === 'darshini'
+          ? '#fb923c'
+          : lm.type === 'atm'
+          ? '#38bdf8'
+          : lm.type === 'landmark'
+          ? '#f8fafc'
           : '#94a3b8';
-      ctx.fillRect(lx - 3, ly - 3, 6, 6);
+      ctx.fillRect(lx - 2.2, ly - 2.2, 4.4, 4.4);
     }
 
-    // Active GPS route line (mission or custom waypoint)
+    // Multi-point GPS Navigation Route
+    if (hud.activeRoute && hud.activeRoute.pathPoints.length >= 2) {
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2.4;
+      ctx.setLineDash([4, 2]);
+      ctx.beginPath();
+      hud.activeRoute.pathPoints.forEach((pt, idx) => {
+        const [rx, ry] = toMap(pt.x, pt.z);
+        if (idx === 0) ctx.moveTo(rx, ry);
+        else ctx.lineTo(rx, ry);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Active GPS target indicator
     const gpsTarget = hud.activeMission
       ? { x: hud.activeMission.targetX, z: hud.activeMission.targetZ, color: '#f59e0b' }
       : hud.waypoint
@@ -76,16 +134,17 @@ export const MinimapCanvas: React.FC<MinimapCanvasProps> = ({ hud, onOpenFullMap
 
     if (gpsTarget) {
       const [tx, ty] = toMap(gpsTarget.x, gpsTarget.z);
-      ctx.strokeStyle = gpsTarget.color;
-      ctx.lineWidth = 2;
-      ctx.setLineDash([4, 3]);
-      ctx.beginPath();
-      ctx.moveTo(half, half);
-      ctx.lineTo(tx, ty);
-      ctx.stroke();
-      ctx.setLineDash([]);
+      if (!hud.activeRoute) {
+        ctx.strokeStyle = gpsTarget.color;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(half, half);
+        ctx.lineTo(tx, ty);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
 
-      // Clamp target indicator to minimap edge if offscreen
       const dx = tx - half;
       const dy = ty - half;
       const dist = Math.hypot(dx, dy);
@@ -126,7 +185,7 @@ export const MinimapCanvas: React.FC<MinimapCanvasProps> = ({ hud, onOpenFullMap
     <button
       type="button"
       onClick={onOpenFullMap}
-      title="Open Bengaluru City Map (M)"
+      title="Open Bengaluru City Atlas (M)"
       className="group relative block overflow-hidden rounded-lg border border-slate-700/90 bg-slate-950/90 shadow-lg focus-visible:outline-2 focus-visible:outline-amber-400"
     >
       <canvas ref={canvasRef} width={168} height={168} className="block" />

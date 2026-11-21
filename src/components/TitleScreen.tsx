@@ -17,9 +17,9 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({ onStart, onStartMissio
           Namma City: Bengaluru
         </h1>
         <p className="text-sm leading-relaxed text-slate-300 md:text-base">
-          Explore 14 iconic districts from Vidhana Soudha and Cubbon Park to MG Road Metro,
-          Silk Board Flyover, Indiranagar, Electronic City, and NICE Road. Drive Namma Auto-Rickshaws,
-          BMTC Volvo buses, superbikes, and custom coupes through living traffic and monsoon skies.
+          Explore 35 geographically mapped Bengaluru zones from Vidhana Soudha, MG Road, Cubbon Park, and Lalbagh
+          to Whitefield, Electronic City, Yelahanka, KIA Airport, and NICE Road — featuring 15 famous landmarks,
+          5 Namma Metro corridors, 8 rail &amp; BMTC hubs, and realistic Indian protagonists with Chaos Cloth physics.
         </p>
 
         <div className="flex flex-wrap items-center gap-3 pt-1">
@@ -44,7 +44,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({ onStart, onStartMissio
         <div className="flex flex-wrap items-center gap-4 pt-2 text-xs text-slate-400">
           <span className="inline-flex items-center gap-1.5">
             <MapPin className="h-3.5 w-3.5 text-amber-400" />
-            WASD Move &amp; Drive · F Enter Vehicle · H Horn · M City Atlas · ESC Garage &amp; Missions
+            WASD Move &amp; Drive · F Enter Vehicle · P Switch Hero · U Studio · M City Atlas · ESC Menu
           </span>
         </div>
       </div>

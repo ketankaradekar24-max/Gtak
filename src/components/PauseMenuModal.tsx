@@ -1,10 +1,19 @@
 import React, { useState } from 'react';
-import { Car, CheckCircle2, Play, Settings, Shirt, Trophy, Wrench, X } from 'lucide-react';
-import { MISSIONS, VEHICLE_SPECS } from '../game/bengaluruData';
+import { Car, CheckCircle2, Play, Settings, Shirt, Sparkles, Trophy, Wrench, X } from 'lucide-react';
+import { MISSIONS, PROTAGONIST_PRESETS, VEHICLE_SPECS } from '../game/bengaluruData';
+import { LANGUAGE_LABELS } from '../game/localization';
+import { listSaveSlots } from '../game/saveSystem';
 import {
+  BeardStyleId,
+  FacePresetId,
   GameSettings,
+  GraphicsQuality,
+  HairStyleId,
   HudSnapshot,
+  OutfitStyleId,
   PlayerCustomization,
+  ProtagonistId,
+  SaveSlotSummary,
   TimePreset,
   VehicleKind,
   VehicleTuning,
@@ -21,18 +30,81 @@ interface PauseMenuModalProps {
   settings: GameSettings;
   onClose: () => void;
   onStartMission: (id: string) => void;
+  onSwitchProtagonist: (id: ProtagonistId) => void;
+  onOpenStudio: () => void;
   onUpdateCustomization: (c: PlayerCustomization) => void;
   onUpdateVehicleTuning: (t: VehicleTuning) => void;
   onSpawnVehicle: (kind: VehicleKind) => void;
   onRepairVehicle: () => void;
   onUpdateSettings: (s: Partial<GameSettings>) => void;
+  onSaveSlot: (slot: number) => void;
+  onLoadSlot: (slot: number) => void;
 }
 
-const GARAGE_VEHICLES: VehicleKind[] = ['coupe', 'bike', 'auto', 'cab', 'bmtc'];
+const GARAGE_VEHICLES: VehicleKind[] = [
+  'coupe',
+  'suv',
+  'hatchback',
+  'bike',
+  'scooter',
+  'auto',
+  'cab',
+  'bmtc',
+  'truck',
+  'ambulance',
+  'delivery',
+];
 const PAINT_SWATCHES = ['#f97316', '#dc2626', '#2563eb', '#16a34a', '#eab308', '#f8fafc', '#18181b', '#7e22ce'];
-const JACKET_COLORS = ['#b45309', '#1e293b', '#991b1b', '#065f46', '#1d4ed8', '#3f3f46'];
-const SHIRT_COLORS = ['#f8fafc', '#0f172a', '#fde047', '#38bdf8', '#f43f5e'];
-const PANTS_COLORS = ['#1e293b', '#172554', '#27272a', '#422006'];
+const JACKET_COLORS = ['#1e293b', '#b45309', '#991b1b', '#065f46', '#1d4ed8', '#d97706'];
+const SHIRT_COLORS = ['#f8fafc', '#ea580c', '#0f172a', '#fde047', '#38bdf8', '#f43f5e'];
+const PANTS_COLORS = ['#0f172a', '#1e293b', '#172554', '#27272a', '#422006'];
+const SHOE_COLORS = ['#111827', '#f8fafc', '#3f2314', '#991b1b'];
+const HAIR_COLORS = ['#18181b', '#27272a', '#451a03', '#71717a'];
+
+const PROTAGONIST_IDS: ProtagonistId[] = ['vikram', 'arjun', 'sathish'];
+
+const FACE_OPTIONS: Array<{ id: FacePresetId; label: string }> = [
+  { id: 'vikram_exec', label: 'Vikram Executive' },
+  { id: 'arjun_classic', label: 'Arjun Classic' },
+  { id: 'sathish_street', label: 'Sathish Street' },
+  { id: 'karthik_warm', label: 'Karthik Warm' },
+  { id: 'rohan_sharp', label: 'Rohan Sharp' },
+];
+
+const HAIR_OPTIONS: Array<{ id: HairStyleId; label: string }> = [
+  { id: 'short_crop', label: 'Short Crop' },
+  { id: 'side_part', label: 'Side Part' },
+  { id: 'wavy_long', label: 'Wavy Long' },
+  { id: 'swept', label: 'Swept' },
+  { id: 'curly', label: 'Curly' },
+  { id: 'bun', label: 'Top Bun' },
+];
+
+const BEARD_OPTIONS: Array<{ id: BeardStyleId; label: string }> = [
+  { id: 'trimmed_beard', label: 'Trimmed Beard' },
+  { id: 'stubble', label: 'Stubble' },
+  { id: 'moustache', label: 'Moustache' },
+  { id: 'full_beard', label: 'Full Beard' },
+  { id: 'clean', label: 'Clean Shaven' },
+];
+
+const OUTFIT_OPTIONS: Array<{ id: OutfitStyleId; label: string }> = [
+  { id: 'suit', label: 'Tailored Suit' },
+  { id: 'jacket', label: 'Smart Jacket' },
+  { id: 'street_shirt', label: 'Street Shirt' },
+  { id: 'kurta', label: 'Cotton Kurta' },
+  { id: 'office', label: 'Office Shirt' },
+  { id: 'hoodie', label: 'Tech Hoodie' },
+];
+
+const WEATHER_OPTIONS: Array<{ id: WeatherMode; label: string }> = [
+  { id: 'clear', label: 'Clear' },
+  { id: 'cloudy', label: 'Cloudy' },
+  { id: 'light_rain', label: 'Light Rain' },
+  { id: 'monsoon', label: 'Monsoon' },
+  { id: 'thunderstorm', label: 'Thunderstorm' },
+  { id: 'fog', label: 'Morning Fog' },
+];
 
 export const PauseMenuModal: React.FC<PauseMenuModalProps> = ({
   initialTab,
@@ -42,29 +114,48 @@ export const PauseMenuModal: React.FC<PauseMenuModalProps> = ({
   settings,
   onClose,
   onStartMission,
+  onSwitchProtagonist,
+  onOpenStudio,
   onUpdateCustomization,
   onUpdateVehicleTuning,
   onSpawnVehicle,
   onRepairVehicle,
   onUpdateSettings,
+  onSaveSlot,
+  onLoadSlot,
 }) => {
   const [tab, setTab] = useState<PauseTab>(initialTab);
   const [custom, setCustom] = useState<PlayerCustomization>(customization);
   const [tuning, setTuning] = useState<VehicleTuning>(vehicleTuning);
+  const [saveTick, setSaveTick] = useState(0);
+  const saveSlots: Array<SaveSlotSummary | null> = (() => {
+    void saveTick;
+    return listSaveSlots();
+  })();
+
+  const updateCustom = (patch: Partial<PlayerCustomization>) => {
+    const next = { ...custom, ...patch };
+    setCustom(next);
+    onUpdateCustomization(next);
+  };
+
+  const handleSelectProtagonist = (pid: ProtagonistId) => {
+    onSwitchProtagonist(pid);
+    setCustom({ ...PROTAGONIST_PRESETS[pid].customization });
+  };
 
   const tabs: Array<{ id: PauseTab; label: string; icon: React.ReactNode }> = [
     { id: 'missions', label: 'Missions', icon: <Trophy className="h-4 w-4" /> },
     { id: 'garage', label: 'Garage & Rides', icon: <Wrench className="h-4 w-4" /> },
-    { id: 'wardrobe', label: 'Wardrobe', icon: <Shirt className="h-4 w-4" /> },
+    { id: 'wardrobe', label: 'Protagonists & Wardrobe', icon: <Shirt className="h-4 w-4" /> },
     { id: 'settings', label: 'Settings', icon: <Settings className="h-4 w-4" /> },
   ];
 
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-950/92 p-6">
       <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
-        {/* Top Bar */}
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 px-6 py-4">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {tabs.map((t) => (
               <button
                 key={t.id}
@@ -91,7 +182,6 @@ export const PauseMenuModal: React.FC<PauseMenuModalProps> = ({
           </button>
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
           {tab === 'missions' && (
             <div className="space-y-4">
@@ -209,7 +299,7 @@ export const PauseMenuModal: React.FC<PauseMenuModalProps> = ({
                           onUpdateVehicleTuning(next);
                         }}
                         className={`h-8 w-8 rounded-md border-2 ${
-                          tuning.color === hex ? 'border-white scale-105' : 'border-slate-700'
+                          tuning.color === hex ? 'scale-105 border-white' : 'border-slate-700'
                         }`}
                         style={{ backgroundColor: hex }}
                         aria-label={`Paint ${hex}`}
@@ -257,109 +347,272 @@ export const PauseMenuModal: React.FC<PauseMenuModalProps> = ({
           )}
 
           {tab === 'wardrobe' && (
-            <div className="mx-auto max-w-xl space-y-5">
-              <div>
-                <h3 className="font-display text-lg font-bold text-white">Arjun — Character Customization</h3>
-                <p className="text-xs text-slate-400">
-                  Changes apply immediately to your 3D character model in Bengaluru.
-                </p>
+            <div className="space-y-5">
+              {/* Three Protagonist Selector Cards */}
+              <div className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="font-display text-base font-bold text-white">
+                      Three Playable Protagonists
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Each hero has unique facial anatomy, body build, walk style &amp; Chaos Cloth attire.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenStudio();
+                    }}
+                    className="flex items-center gap-1.5 rounded-md bg-purple-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-400"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Open Cinematography Studio [U]
+                  </button>
+                </div>
+
+                <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                  {PROTAGONIST_IDS.map((pid) => {
+                    const prof = PROTAGONIST_PRESETS[pid];
+                    const active = custom.protagonistId === pid;
+                    return (
+                      <button
+                        key={pid}
+                        type="button"
+                        onClick={() => handleSelectProtagonist(pid)}
+                        className={`rounded-lg border p-3 text-left transition-colors ${
+                          active
+                            ? 'border-amber-400 bg-amber-500/10'
+                            : 'border-slate-800 bg-slate-900/70 hover:border-slate-600'
+                        }`}
+                      >
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="font-display text-sm font-bold text-white">{prof.name}</span>
+                          <span className="text-[11px] font-semibold text-amber-400">Age {prof.age}</span>
+                        </div>
+                        <div className="text-[11px] font-medium text-sky-400">{prof.archetypeTitle}</div>
+                        <p className="mt-1 text-[11px] leading-snug text-slate-400">{prof.bodySummary}</p>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              <div className="space-y-4 rounded-lg border border-slate-800 bg-slate-950 p-5">
-                <div>
-                  <span className="text-xs font-medium text-slate-300">Jacket Color</span>
-                  <div className="mt-2 flex gap-2">
-                    {JACKET_COLORS.map((hex) => (
-                      <button
-                        key={hex}
-                        type="button"
-                        onClick={() => {
-                          const next = { ...custom, jacketColor: hex };
-                          setCustom(next);
-                          onUpdateCustomization(next);
-                        }}
-                        className={`h-8 w-8 rounded-md border-2 ${
-                          custom.jacketColor === hex ? 'border-amber-400' : 'border-slate-700'
-                        }`}
-                        style={{ backgroundColor: hex }}
-                      />
-                    ))}
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div className="space-y-4 rounded-lg border border-slate-800 bg-slate-950 p-5">
+                  <h3 className="font-display text-base font-bold text-white">Face, Hair &amp; Grooming</h3>
+
+                  <div>
+                    <span className="text-xs font-medium text-slate-300">Facial Structure &amp; Skin Tone</span>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      {FACE_OPTIONS.map((f) => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => updateCustom({ facePreset: f.id })}
+                          className={`rounded py-1.5 text-xs font-medium ${
+                            custom.facePreset === f.id
+                              ? 'bg-amber-500 text-slate-950 font-semibold'
+                              : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          }`}
+                        >
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-xs font-medium text-slate-300">Hairstyle</span>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {HAIR_OPTIONS.map((h) => (
+                        <button
+                          key={h.id}
+                          type="button"
+                          onClick={() => updateCustom({ hairStyle: h.id })}
+                          className={`rounded px-3 py-1.5 text-xs font-medium ${
+                            custom.hairStyle === h.id
+                              ? 'bg-amber-500 text-slate-950 font-semibold'
+                              : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          }`}
+                        >
+                          {h.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      {HAIR_COLORS.map((hex) => (
+                        <button
+                          key={hex}
+                          type="button"
+                          onClick={() => updateCustom({ hairColor: hex })}
+                          className={`h-6 w-6 rounded-full border-2 ${
+                            custom.hairColor === hex ? 'border-amber-400' : 'border-slate-700'
+                          }`}
+                          style={{ backgroundColor: hex }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-xs font-medium text-slate-300">Beard &amp; Moustache</span>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      {BEARD_OPTIONS.map((b) => (
+                        <button
+                          key={b.id}
+                          type="button"
+                          onClick={() => updateCustom({ beardStyle: b.id })}
+                          className={`rounded py-1.5 text-xs font-medium ${
+                            custom.beardStyle === b.id
+                              ? 'bg-amber-500 text-slate-950 font-semibold'
+                              : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          }`}
+                        >
+                          {b.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
-                <div>
-                  <span className="text-xs font-medium text-slate-300">Inner Shirt</span>
-                  <div className="mt-2 flex gap-2">
-                    {SHIRT_COLORS.map((hex) => (
-                      <button
-                        key={hex}
-                        type="button"
-                        onClick={() => {
-                          const next = { ...custom, shirtColor: hex };
-                          setCustom(next);
-                          onUpdateCustomization(next);
-                        }}
-                        className={`h-8 w-8 rounded-md border-2 ${
-                          custom.shirtColor === hex ? 'border-amber-400' : 'border-slate-700'
-                        }`}
-                        style={{ backgroundColor: hex }}
-                      />
-                    ))}
-                  </div>
-                </div>
+                <div className="space-y-4 rounded-lg border border-slate-800 bg-slate-950 p-5">
+                  <h3 className="font-display text-base font-bold text-white">Clothing &amp; Accessories</h3>
 
-                <div>
-                  <span className="text-xs font-medium text-slate-300">Trousers / Denim</span>
-                  <div className="mt-2 flex gap-2">
-                    {PANTS_COLORS.map((hex) => (
-                      <button
-                        key={hex}
-                        type="button"
-                        onClick={() => {
-                          const next = { ...custom, pantsColor: hex };
-                          setCustom(next);
-                          onUpdateCustomization(next);
-                        }}
-                        className={`h-8 w-8 rounded-md border-2 ${
-                          custom.pantsColor === hex ? 'border-amber-400' : 'border-slate-700'
-                        }`}
-                        style={{ backgroundColor: hex }}
-                      />
-                    ))}
+                  <div>
+                    <span className="text-xs font-medium text-slate-300">Outfit Style (Chaos Cloth Enabled)</span>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      {OUTFIT_OPTIONS.map((o) => (
+                        <button
+                          key={o.id}
+                          type="button"
+                          onClick={() => updateCustom({ outfitStyle: o.id })}
+                          className={`rounded py-1.5 text-xs font-medium ${
+                            custom.outfitStyle === o.id
+                              ? 'bg-amber-500 text-slate-950 font-semibold'
+                              : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          }`}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
 
-                <div className="flex flex-wrap gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const next = { ...custom, sunglasses: !custom.sunglasses };
-                      setCustom(next);
-                      onUpdateCustomization(next);
-                    }}
-                    className={`rounded-md border px-4 py-2 text-xs font-semibold ${
-                      custom.sunglasses
-                        ? 'border-amber-400 bg-amber-500/15 text-amber-300'
-                        : 'border-slate-700 bg-slate-900 text-slate-400'
-                    }`}
-                  >
-                    Aviator Sunglasses: {custom.sunglasses ? 'ON' : 'OFF'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const next = { ...custom, backpack: !custom.backpack };
-                      setCustom(next);
-                      onUpdateCustomization(next);
-                    }}
-                    className={`rounded-md border px-4 py-2 text-xs font-semibold ${
-                      custom.backpack
-                        ? 'border-amber-400 bg-amber-500/15 text-amber-300'
-                        : 'border-slate-700 bg-slate-900 text-slate-400'
-                    }`}
-                  >
-                    Courier Backpack: {custom.backpack ? 'ON' : 'OFF'}
-                  </button>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-xs font-medium text-slate-300">Outer / Blazer / Jacket</span>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {JACKET_COLORS.map((hex) => (
+                          <button
+                            key={hex}
+                            type="button"
+                            onClick={() => updateCustom({ jacketColor: hex })}
+                            className={`h-7 w-7 rounded border-2 ${
+                              custom.jacketColor === hex ? 'border-amber-400' : 'border-slate-700'
+                            }`}
+                            style={{ backgroundColor: hex }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-xs font-medium text-slate-300">Shirt / Kurta</span>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {SHIRT_COLORS.map((hex) => (
+                          <button
+                            key={hex}
+                            type="button"
+                            onClick={() => updateCustom({ shirtColor: hex })}
+                            className={`h-7 w-7 rounded border-2 ${
+                              custom.shirtColor === hex ? 'border-amber-400' : 'border-slate-700'
+                            }`}
+                            style={{ backgroundColor: hex }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-xs font-medium text-slate-300">Denim / Trousers</span>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {PANTS_COLORS.map((hex) => (
+                          <button
+                            key={hex}
+                            type="button"
+                            onClick={() => updateCustom({ pantsColor: hex })}
+                            className={`h-7 w-7 rounded border-2 ${
+                              custom.pantsColor === hex ? 'border-amber-400' : 'border-slate-700'
+                            }`}
+                            style={{ backgroundColor: hex }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-xs font-medium text-slate-300">Shoes</span>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {SHOE_COLORS.map((hex) => (
+                          <button
+                            key={hex}
+                            type="button"
+                            onClick={() => updateCustom({ shoeColor: hex })}
+                            className={`h-7 w-7 rounded border-2 ${
+                              custom.shoeColor === hex ? 'border-amber-400' : 'border-slate-700'
+                            }`}
+                            style={{ backgroundColor: hex }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => updateCustom({ sunglasses: !custom.sunglasses })}
+                      className={`rounded border px-3 py-1.5 text-xs font-semibold ${
+                        custom.sunglasses
+                          ? 'border-amber-400 bg-amber-500/15 text-amber-300'
+                          : 'border-slate-700 bg-slate-900 text-slate-400'
+                      }`}
+                    >
+                      Sunglasses: {custom.sunglasses ? 'ON' : 'OFF'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateCustom({ watch: !custom.watch })}
+                      className={`rounded border px-3 py-1.5 text-xs font-semibold ${
+                        custom.watch
+                          ? 'border-amber-400 bg-amber-500/15 text-amber-300'
+                          : 'border-slate-700 bg-slate-900 text-slate-400'
+                      }`}
+                    >
+                      Watch: {custom.watch ? 'ON' : 'OFF'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateCustom({ chain: !custom.chain })}
+                      className={`rounded border px-3 py-1.5 text-xs font-semibold ${
+                        custom.chain
+                          ? 'border-amber-400 bg-amber-500/15 text-amber-300'
+                          : 'border-slate-700 bg-slate-900 text-slate-400'
+                      }`}
+                    >
+                      Gold Chain: {custom.chain ? 'ON' : 'OFF'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateCustom({ backpack: !custom.backpack })}
+                      className={`rounded border px-3 py-1.5 text-xs font-semibold ${
+                        custom.backpack
+                          ? 'border-amber-400 bg-amber-500/15 text-amber-300'
+                          : 'border-slate-700 bg-slate-900 text-slate-400'
+                      }`}
+                    >
+                      Backpack: {custom.backpack ? 'ON' : 'OFF'}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -368,23 +621,56 @@ export const PauseMenuModal: React.FC<PauseMenuModalProps> = ({
           {tab === 'settings' && (
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               <div className="space-y-4 rounded-lg border border-slate-800 bg-slate-950 p-5">
-                <h3 className="font-display text-base font-bold text-white">Atmosphere &amp; Simulation</h3>
+                <h3 className="font-display text-base font-bold text-white">Atmosphere, Weather &amp; Graphics</h3>
 
                 <div>
-                  <span className="text-xs font-medium text-slate-300">Time of Day</span>
-                  <div className="mt-2 grid grid-cols-4 gap-1.5">
-                    {(['auto', 'morning', 'golden', 'night'] as TimePreset[]).map((tp) => (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-slate-300">Time of Day &amp; Live IST Clock</span>
+                    <span className="font-mono-hud text-[11px] text-amber-400 tabular-nums">
+                      {hud.istWeekday} · {hud.istClockLabel} ({hud.timezoneLabel})
+                    </span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-5 gap-1.5">
+                    {(
+                      [
+                        { id: 'ist_realtime', label: 'IST Live 1:1' },
+                        { id: 'auto', label: 'Game-Time' },
+                        { id: 'morning', label: 'Morning' },
+                        { id: 'golden', label: 'Golden' },
+                        { id: 'night', label: 'Night' },
+                      ] as Array<{ id: TimePreset; label: string }>
+                    ).map((tp) => (
                       <button
-                        key={tp}
+                        key={tp.id}
                         type="button"
-                        onClick={() => onUpdateSettings({ timePreset: tp })}
-                        className={`rounded py-1.5 text-xs font-medium capitalize ${
-                          settings.timePreset === tp
+                        onClick={() => onUpdateSettings({ timePreset: tp.id })}
+                        className={`rounded py-1.5 text-xs font-medium whitespace-nowrap ${
+                          settings.timePreset === tp.id
                             ? 'bg-amber-500 text-slate-950 font-semibold'
                             : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                         }`}
                       >
-                        {tp}
+                        {tp.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-xs font-medium text-slate-300">Language / ಭಾಷೆ</span>
+                  <div className="mt-2 grid grid-cols-5 gap-1.5">
+                    {LANGUAGE_LABELS.map((lang) => (
+                      <button
+                        key={lang.id}
+                        type="button"
+                        onClick={() => onUpdateSettings({ language: lang.id })}
+                        className={`rounded py-1.5 text-xs font-medium ${
+                          settings.language === lang.id
+                            ? 'bg-emerald-500 text-slate-950 font-semibold'
+                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        }`}
+                      >
+                        {lang.native}
                       </button>
                     ))}
                   </div>
@@ -393,18 +679,38 @@ export const PauseMenuModal: React.FC<PauseMenuModalProps> = ({
                 <div>
                   <span className="text-xs font-medium text-slate-300">Bengaluru Weather</span>
                   <div className="mt-2 grid grid-cols-3 gap-1.5">
-                    {(['clear', 'overcast', 'monsoon'] as WeatherMode[]).map((w) => (
+                    {WEATHER_OPTIONS.map((w) => (
                       <button
-                        key={w}
+                        key={w.id}
                         type="button"
-                        onClick={() => onUpdateSettings({ weather: w })}
-                        className={`rounded py-1.5 text-xs font-medium capitalize ${
-                          settings.weather === w
+                        onClick={() => onUpdateSettings({ weather: w.id })}
+                        className={`rounded py-1.5 text-xs font-medium ${
+                          settings.weather === w.id
                             ? 'bg-sky-500 text-slate-950 font-semibold'
                             : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                         }`}
                       >
-                        {w === 'monsoon' ? 'Monsoon Rain' : w}
+                        {w.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-xs font-medium text-slate-300">Graphics Preset</span>
+                  <div className="mt-2 grid grid-cols-4 gap-1.5">
+                    {(['low', 'medium', 'high', 'ultra'] as GraphicsQuality[]).map((gq) => (
+                      <button
+                        key={gq}
+                        type="button"
+                        onClick={() => onUpdateSettings({ graphicsQuality: gq })}
+                        className={`rounded py-1.5 text-xs font-medium capitalize ${
+                          settings.graphicsQuality === gq
+                            ? 'bg-emerald-500 text-slate-950 font-semibold'
+                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        }`}
+                      >
+                        {gq}
                       </button>
                     ))}
                   </div>
@@ -430,7 +736,7 @@ export const PauseMenuModal: React.FC<PauseMenuModalProps> = ({
                   </div>
                 </div>
 
-                <div className="flex gap-3 pt-2">
+                <div className="flex gap-3 pt-1">
                   <button
                     type="button"
                     onClick={() => onUpdateSettings({ sfxOn: !settings.sfxOn })}
@@ -456,29 +762,74 @@ export const PauseMenuModal: React.FC<PauseMenuModalProps> = ({
                 </div>
               </div>
 
-              <div className="space-y-3 rounded-lg border border-slate-800 bg-slate-950 p-5 text-xs text-slate-300">
-                <h3 className="font-display text-base font-bold text-white">Controls Reference</h3>
-                <div className="grid grid-cols-2 gap-y-2 border-t border-slate-800 pt-3">
+              <div className="space-y-4 rounded-lg border border-slate-800 bg-slate-950 p-5 text-xs text-slate-300">
+                <div>
+                  <h3 className="font-display text-base font-bold text-white">3-Slot Save &amp; Load</h3>
+                  <div className="mt-2 space-y-2">
+                    {[1, 2, 3].map((slotNum, idx) => {
+                      const info = saveSlots[idx];
+                      return (
+                        <div
+                          key={slotNum}
+                          className="flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900 px-3 py-2"
+                        >
+                          <div className="min-w-0">
+                            <div className="font-semibold text-white">
+                              Slot {slotNum}: {info ? `${info.protagonistName} · ${info.districtName}` : 'Empty'}
+                            </div>
+                            <div className="text-[10px] text-slate-400">
+                              {info ? `₹${info.cash.toLocaleString('en-IN')} · ${info.savedAt}` : 'No saved data'}
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onSaveSlot(slotNum);
+                                setSaveTick((t) => t + 1);
+                              }}
+                              className="rounded bg-sky-500 px-2.5 py-1 text-[11px] font-bold text-slate-950 hover:bg-sky-400"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              disabled={!info}
+                              onClick={() => {
+                                onLoadSlot(slotNum);
+                                onClose();
+                              }}
+                              className="rounded border border-slate-700 px-2.5 py-1 text-[11px] font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-40"
+                            >
+                              Load
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <h3 className="font-display text-base font-bold text-white pt-1">Controls Reference</h3>
+                <div className="grid grid-cols-2 gap-y-1.5 border-t border-slate-800 pt-2.5">
                   <span className="text-slate-400">Move / Drive</span>
                   <span className="font-mono-hud text-white">W A S D / Arrows</span>
                   <span className="text-slate-400">Sprint / Nitro Boost</span>
                   <span className="font-mono-hud text-white">Left Shift</span>
                   <span className="text-slate-400">Jump / Handbrake</span>
                   <span className="font-mono-hud text-white">Space</span>
-                  <span className="text-slate-400">Crouch</span>
-                  <span className="font-mono-hud text-white">C</span>
-                  <span className="text-slate-400">Enter / Exit Vehicle / Interact</span>
+                  <span className="text-slate-400">Punch / Fire · Kick · Block · Dodge</span>
+                  <span className="font-mono-hud text-white">G or RMB · X · Q · Z</span>
+                  <span className="text-slate-400">Enter Vehicle / Metro / Interior / Darshini</span>
                   <span className="font-mono-hud text-white">F or E</span>
-                  <span className="text-slate-400">Vehicle Horn</span>
-                  <span className="font-mono-hud text-white">H</span>
-                  <span className="text-slate-400">Headlights</span>
-                  <span className="font-mono-hud text-white">L</span>
-                  <span className="text-slate-400">Camera Orbit</span>
-                  <span className="font-mono-hud text-white">Left Mouse Drag</span>
-                  <span className="text-slate-400">Equip Tool / Fire EMP</span>
-                  <span className="font-mono-hud text-white">1-4 / G or Right Click</span>
-                  <span className="text-slate-400">City Map / Pause Menu</span>
-                  <span className="font-mono-hud text-white">M / ESC</span>
+                  <span className="text-slate-400">Smartphone / Radio Player</span>
+                  <span className="font-mono-hud text-white">Tab / R</span>
+                  <span className="text-slate-400">Switch Hero / Studio</span>
+                  <span className="font-mono-hud text-white">P / U</span>
+                  <span className="text-slate-400">Camera Mode / Face Close-Up</span>
+                  <span className="font-mono-hud text-white">V / K</span>
+                  <span className="text-slate-400">City Map / Pause Menu / Diagnostics</span>
+                  <span className="font-mono-hud text-white">M / ESC / F3</span>
                 </div>
               </div>
             </div>
